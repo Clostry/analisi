@@ -7,6 +7,8 @@ display
 gate
 psd
 counts
+triggercheck
+*.root
 *.py
 *.pyc
 *.swp

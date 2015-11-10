@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
 	int		tot_events, j = 0, j1 = 0, j2 = 0, j3 = 0, j4 = 0,
 			alt=0, alt1=0, alt2=0;
 	float	qlong, qshort, baseline, diff,
-			th_base=baselineTH, th_qlong = 130, th_qshort = 30, th_time=500, th_trigger = 19; 
+			th_base=baselineTH, th_qlong = 130, th_qshort = 30, th_time=500, th_trigger = 5; 
 
 	DataInterface *idata;
 	acqPSDParam_t params;
@@ -101,7 +101,7 @@ int main(int argc, char *argv[])
 	h_qlong = new TH1F("h_qlong","Qlong check",1000,-500,500);
 	h_qshort = new TH1F("h_qshort","Qshort check",100,-40,40);
 	h_time = new TH1F("h_time","Time check",1000,0,10000);
-	h_trigger = new TH1F("h_trigger","Trigger check",400,0,400);
+	h_trigger = new TH1F("h_trigger","Trigger check",100,-0.5,99.5);
 	
   long int time=0;
   int timediff;
@@ -174,14 +174,11 @@ int main(int argc, char *argv[])
     }
     time = evento.timetag;
     int trig = trigger(evento,params);
-		if (trig<th_trigger) 
+		if (params.pretrigger - trig > th_trigger) 
     {
       j4++;
     }
-    if (trig == 2) 
-    {
-      cout << i << endl;
-    }
+
     h_trigger->Fill(trig);
 
 //		cout<<"\rLoad "<< (int)(100.0*(i)/(tot_events)) <<"%";

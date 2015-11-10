@@ -3,16 +3,38 @@
 
 using namespace std;
 
+/*
 int trigger(event_data data, acqPSDParam_t params)
 {
+  int value = -1;
   for(int i=0;i<(int)params.numsamples;i++)
   {
-    if ((data.baseline - data.samples[i]) > params.threshold)
+    if (((int)data.baseline - (int)data.samples[i]) > (int)params.threshold)
     {
-      return i;
+      value = i;
+      break;
     }
   }
-  return -1;
+  return value;
+}
+*/
+
+int trigger(event_data data, acqPSDParam_t params)
+{
+  int i = 0;
+
+  int bs = data.baseline;
+  int sample = data.samples[i];
+  int th = params.threshold;
+  int n = params.numsamples;
+
+  while ( ( (bs - sample) < th ) && ( i < n - 1 ) )
+  {
+    i++;
+    sample = data.samples[i];
+  }
+
+  return i-1;
 }
 
 bool saturation(event_data data, acqPSDParam_t params, int *lastbin , int *nbin )
@@ -66,41 +88,63 @@ void GetIntegralFromScope(event_data inc_data, acqPSDParam_t psd_params, float *
   float integral = 0;
   int max = 0;
   int j;
+
+  int pt = psd_params.pretrigger;
+  int pg = psd_params.pregate;
+  int sg = psd_params.shortgate;
+  int lg = psd_params.longgate;
+  int n  = psd_params.numsamples;
+
   if (baseline_from_scope)
   {
     //calcola baseline 
     *baseline = 0;
-    for( j=0; j < (int) (psd_params.pretrigger-psd_params.pregate); j++)
+    max = pt - pg;
+    //media massimo su 64 canali
+    if (max > 64) 
     {
-      *baseline += inc_data.samples[j];
+      max = 64;
+    }
+    for( j=0; j < max; j++)
+    {
+      *baseline += (int) inc_data.samples[j];
     }
     //fai la media
-    *baseline /= psd_params.pretrigger-psd_params.pregate;
+    *baseline /= max;
   } else
   { 
     // usa baseline scheda
-    *baseline = inc_data.baseline;
+    *baseline = (float) inc_data.baseline;
   }
-  max = psd_params.pretrigger-psd_params.pregate+psd_params.shortgate+1;
+  max = pt - pg + sg + 1;
   //non andare oltre il numero di sample
-  if (max > (int)psd_params.numsamples)
-    max = psd_params.numsamples;
-  //calcola integrale qshort
-  for( j = psd_params.pretrigger - psd_params.pregate + 1; j < max; j++) 
+  if ( max > n )
   {
-    integral += *baseline-inc_data.samples[j];
+    max = n;
   }
+
+  //calcola integrale qshort
+  for( j =  pt - pg + 1; j < max; j++) 
+  {
+    integral += *baseline - (float) inc_data.samples[j];
+  }
+
   *qshort = integral;
 
-  max = psd_params.pretrigger-psd_params.pregate+psd_params.longgate + 1;
+  max = pt - pg + lg + 1;
+
   //non andare oltre il numero di sample
-  if (max > (int)psd_params.numsamples) 
-    max = psd_params.numsamples;
-  //calcola integrale qlong
-  for( j = psd_params.pretrigger - psd_params.pregate + psd_params.shortgate + 1 ; j < max; j++ )
+  if ( max > n ) 
   {
-    integral += *baseline-inc_data.samples[j];
+    max = n;
   }
+
+  //calcola integrale qlong
+  for( j = pt - pg + sg + 1 ; j < max; j++ )
+  {
+    integral += *baseline - (float)inc_data.samples[j];
+  }
+
   *qlong = integral;
 
 }

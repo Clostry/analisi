@@ -9,7 +9,7 @@ ROOT_LIBS = `root-config --libs --glibs` -lSpectrum
 
 BOOST_LIBS = -lboost_program_options
 
-all: californio check pileupcheck display gate psd counts
+all: californio check pileupcheck display gate psd counts triggercheck
 		 @echo "All source compiled!"
 
 californio: data_interface.o functions.o
@@ -61,7 +61,13 @@ counts: data_interface.o functions.o
 							-I . \
 							$(CFLAGS) \
 							$(ROOT_CFLAGS) $(ROOT_LDFLAGS) $(ROOT_LIBS)
-	
+
+triggercheck: data_interface.o functions.o
+						$(CC) triggercheck.cc data_interface.o functions.o \
+							-o $@ \
+							-I . \
+							$(CFLAGS) \
+							$(ROOT_CFLAGS) $(ROOT_LDFLAGS) $(ROOT_LIBS)
 
 data_interface.o:
 						$(CC) -c data_interface.cc \
@@ -77,4 +83,4 @@ functions.o:
 							
 
 clean:
-	rm *.o californio check pileupcheck gate display psd counts
+	rm *.o californio check pileupcheck gate display psd counts triggercheck
