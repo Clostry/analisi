@@ -1,4 +1,12 @@
 varie/
+scripts/gate_batch
+californio
+check
+pileupcheck
+display
+gate
+psd
+counts
 *.py
 *.pyc
 *.swp

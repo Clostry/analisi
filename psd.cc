@@ -1,6 +1,7 @@
 #include "root_include.h"
 #include "data_interface.h"
 #include "functions.h"
+#include "filtersparams.h"
 
 #include <iostream>
 
@@ -62,9 +63,13 @@ int main(int argc,char *argv[])
     if (((!saturation(evento,params)))&&(!pileup(evento,params,70)))
     {
       GetIntegralFromScope(evento, params, &qlong, &qshort, &baseline, false);
-      float psd = (qlong - qshort) / (float) qlong;
-      h_psd->Fill(qlong,psd);
-      h->Fill(qlong);
+      float diff = TMath::Abs( evento.baseline - baseline );
+      if ( diff < baselineTH )
+      {
+        float psd = (qlong - qshort) / (float) qlong;
+        h_psd->Fill(qlong,psd);
+        h->Fill(qlong);
+      }
     }
   }
 

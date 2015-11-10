@@ -1,6 +1,7 @@
 #include "root_include.h"
 #include "data_interface.h"
 #include "functions.h"
+#include "filtersparams.h"
 
 #include <iostream>
 #include <fstream>
@@ -40,7 +41,7 @@ int main(int argc, char *argv[])
   int canale =4;
   int tot_events;
   float th_rel=0.06;
-  int th_abs=70;
+  int th_abs=pileupTH;
   bool th_float = false;
   bool pu;
   ofstream outfile;

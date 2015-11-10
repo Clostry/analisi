@@ -1,6 +1,7 @@
 #include "root_include.h"
 #include "data_interface.h"
 #include "functions.h"
+#include "filtersparams.h"
 
 #include <iostream>
 #include <fstream>
@@ -23,7 +24,6 @@ int main(int argc,char *argv[])
   int canale = 4;
   int qlongmax = 20000;
 
-  float th_base = 2;
   int ncol = 14;
 
   fstream fgate;
@@ -59,13 +59,13 @@ int main(int argc,char *argv[])
   for(int i = 0; i < n; i++)
   {
     evento = idata->GetEntry(i);
-    if ((!saturation(evento,params)))//&&(!pileup(evento,params,70)))
+    if ((!saturation(evento,params))&&(!pileup(evento,params,pileupTH)))
     {
 
       GetIntegralFromScope(evento, params, &qlong, &qshort, &baseline, false);
       float diff = TMath::Abs(evento.baseline - baseline);
 
-      if ( diff < th_base )
+      if ( diff < baselineTH )
       {
         float psd = (qlong - qshort) / (float) qlong;
         h_psd->Fill(qlong,psd);

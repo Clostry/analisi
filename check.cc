@@ -1,6 +1,7 @@
 #include "root_include.h"
 #include "data_interface.h"
 #include "functions.h"
+#include "filtersparams.h"
 
 #include <iostream>
 #include <fstream>
@@ -31,7 +32,7 @@ int main(int argc, char *argv[])
 	int		tot_events, j = 0, j1 = 0, j2 = 0, j3 = 0, j4 = 0,
 			alt=0, alt1=0, alt2=0;
 	float	qlong, qshort, baseline, diff,
-			th_base=2, th_qlong = 130, th_qshort = 30, th_time=500, th_trigger = 19; 
+			th_base=baselineTH, th_qlong = 130, th_qshort = 30, th_time=500, th_trigger = 19; 
 
 	DataInterface *idata;
 	acqPSDParam_t params;

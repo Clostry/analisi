@@ -1,10 +1,9 @@
 #include "root_include.h"
 #include "data_interface.h"
 #include "functions.h"
+#include "filtersparams.h"
 
 #include <iostream>
-
-const int n_eventi = 12;
 
 using namespace std;
 
@@ -133,7 +132,7 @@ int main(int argc, char *argv[])
   TCanvas *cnv;
 
   int dummyargc = 0;
-  char **dummyargv = 0;
+  char **dummyargv;
 
   int nbin = 300;
   float hmin = 0;
@@ -154,8 +153,8 @@ int main(int argc, char *argv[])
   int center, hwidth;
   int tot_events;
 
-  float th_base = 2;
-  int th_pu = 70;
+  float th_base = baselineTH;
+  int th_pu = pileupTH;
 
   float qlong,qshort,baseline;
   
@@ -181,7 +180,17 @@ int main(int argc, char *argv[])
 
   TApplication *app = 0;
 
-  if (!batch)  app = new TApplication("application", &dummyargc, &dummyargv[0]);
+  if (batch) 
+  {
+    dummyargc = 2;
+    dummyargv = new char*[2];
+    dummyargv[0] = new char[5];
+    dummyargv[1] = new char[5];
+    strcpy(dummyargv[0],"gate");
+    strcpy(dummyargv[1],"-b");
+  }	
+
+  app = new TApplication("application", &dummyargc, &dummyargv[0]);
 
   if (argc < 5)
   {
@@ -195,16 +204,16 @@ int main(int argc, char *argv[])
   fbkg = argv[2];
   center = atoi(argv[3]);
   hwidth = atoi(argv[4]);
-	
-	idata = new DataInterface(fdata);
-	idata->SetChannel(canale);
-	params = idata->GetParams();
 
-	ibkg = new DataInterface(fbkg);
-	ibkg->SetChannel(canale);
+  idata = new DataInterface(fdata);
+  idata->SetChannel(canale);
+  params = idata->GetParams();
 
-	tot_events = idata->GetEntries();
-	
+  ibkg = new DataInterface(fbkg);
+  ibkg->SetChannel(canale);
+
+  tot_events = idata->GetEntries();
+
   if (!batch)
   {
     cout << "Opening file " << argv[1] << endl;
@@ -221,10 +230,10 @@ int main(int argc, char *argv[])
 
   cnv = new TCanvas("cnv","",1200,500);
   cnv->Divide(3,1);
-	h_psd = new TH1F("h_psd","",nbin,hmin,hmax);
-	h_psd_bkg = new TH1F("h_psd_bkg","",nbin,hmin,hmax);
-	h_shifted = new TH1F("h_shifted","",nbin,hmin,hmax);
-	h_diff = new TH1F("h_diff","",nbin,hmin,hmax);
+  h_psd = new TH1F("h_psd","",nbin,hmin,hmax);
+  h_psd_bkg = new TH1F("h_psd_bkg","",nbin,hmin,hmax);
+  h_shifted = new TH1F("h_shifted","",nbin,hmin,hmax);
+  h_diff = new TH1F("h_diff","",nbin,hmin,hmax);
 
   binw = h_psd->GetBinWidth(1);
 
@@ -516,26 +525,26 @@ int main(int argc, char *argv[])
     cout << "10% ratio: "  << ratio10pc << " psd: " << psd10pc << " eff: " << eff10pc << endl;
     cout << "PSD oltre la quale perdo solo 1% neutroni : " << psd_min << endl;
     cout << "PSD min, valle e max (1%): " << psd_min << " " << psd_mean << " " << psd_max << endl;
+
+    cnv->cd(1);
+    h_psd->Draw();
+    f_n->SetRange(hmin,hmax);
+    f_n->SetLineColor(1);
+    f_n->Draw("SAME");
+    f_data->SetRange(hmin,hmax);
+    f_data->SetLineColor(2);
+    f_data->Draw("SAME");
+    ftot->SetLineColor(3);
+    ftot->Draw("SAME");
+
+    cnv->cd(2);
+    //	h_psd_bkg->Draw();
+    //  f_bkg->Draw("SAME");
+    h_shifted->Draw();
+
+    cnv->cd(3);
+    h_diff->Draw();
   }
-
-	cnv->cd(1);
-	h_psd->Draw();
-  f_n->SetRange(hmin,hmax);
-  f_n->SetLineColor(1);
-  f_n->Draw("SAME");
-  f_data->SetRange(hmin,hmax);
-  f_data->SetLineColor(2);
-  f_data->Draw("SAME");
-  ftot->SetLineColor(3);
-  ftot->Draw("SAME");
-
-	cnv->cd(2);
-//	h_psd_bkg->Draw();
-//  f_bkg->Draw("SAME");
-	h_shifted->Draw();
-
-  cnv->cd(3);
-  h_diff->Draw();
 
   if (fitdata)
   {
@@ -549,7 +558,7 @@ int main(int argc, char *argv[])
       << eff05pch << " " << eff1pch << " " << eff2pch << " " << eff5pch << " " << eff10pch << endl;
   }
 
-  if (app) app->Run(kTRUE);
+  if (!batch) app->Run(kTRUE);
 
   return 0;
 	
