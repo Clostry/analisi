@@ -272,6 +272,16 @@ int main(int argc, char *argv[])
       return 1;
     }
 
+    if (vm.count("non-interactive"))
+    {
+      dummyargc = 2;
+      dummyargv = new char*[2];
+      dummyargv[0] = new char[5];
+      dummyargv[1] = new char[5];
+      strcpy(dummyargv[0],argv[0]);
+      strcpy(dummyargv[1],"-b");
+    }
+
     application = new TApplication("application", &dummyargc, &dummyargv[0]);
 
     
@@ -729,16 +739,16 @@ int main(int argc, char *argv[])
       {
         vector<float> x = vm["calibration"].as<vector<float> >();
 
-        h_psd_q->GetXaxis()->SetTitle("qlong (eV)");
+        h_psd_q->GetXaxis()->SetTitle("qlong (keVee)");
         h_psd_q->GetXaxis()->Set(psd_nbin,x[1],x[1]+psd_maxqlong*x[0]);
 
-        h_psd_q_online->GetXaxis()->SetTitle("qlong (eV)");
+        h_psd_q_online->GetXaxis()->SetTitle("qlong (keVee)");
         h_psd_q_online->GetXaxis()->Set(psd_nbin,x[1],x[1]+psd_maxqlong*x[0]);
 
-        h_qlong_online->GetXaxis()->SetTitle("qlong (eV)");
+        h_qlong_online->GetXaxis()->SetTitle("qlong (keVee)");
         h_qlong_online->GetXaxis()->Set(psd_nbin,x[1],x[1]+psd_maxqlong*x[0]);
 
-        h_qlong->GetXaxis()->SetTitle("qlong (eV)");
+        h_qlong->GetXaxis()->SetTitle("qlong (keVee)");
         h_qlong->GetXaxis()->Set(psd_nbin,x[1],x[1]+psd_maxqlong*x[0]);
       }
 
@@ -858,13 +868,13 @@ int main(int argc, char *argv[])
 
     cnv_dummy->Close();
 
-//    if (application) 
     if (!vm.count("non-interactive"))
     {
       cout << "Running Application\n";
       application->Run(kTRUE);
-      delete application;
     }
+
+    delete application;
 
     if (optim_file.is_open())
     {
