@@ -1,6 +1,7 @@
 //functions.h
 //
 //
+float getFom(float mean1, float sigma1, float mean2, float sigma2);
 
 int trigger(event_data data, acqPSDParam_t params);
 

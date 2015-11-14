@@ -3,6 +3,11 @@
 
 using namespace std;
 
+float getFom(float mean1, float sigma1, float mean2, float sigma2)
+{
+  return  ( mean2 - mean1 ) / ( (sigma1 + sigma2)*2.3548200 );
+}
+
 /*
 int trigger(event_data data, acqPSDParam_t params)
 {
