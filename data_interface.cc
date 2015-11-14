@@ -27,6 +27,10 @@ int DataInterface::SetChannel(int channel)
   }
 
   b = t->GetBranch("psd_params");
+  if (!b)
+  {
+     b = t->GetBranch("acq_params");
+  }
   b->SetAddress(&params);
   b->GetEntry(channel);
 //  std::string tmp = "acq_ch" + std::to_string(channel);
