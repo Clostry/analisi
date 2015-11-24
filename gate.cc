@@ -5,6 +5,10 @@
 
 #include <iostream>
 
+#define OFFLINE
+#define FILTERS
+
+
 using namespace std;
 
 int scanrh(TH1F *h_psd, TH1F *h_bkg, int minbin, int maxbin, float stopratio, double &psd, double &ratio)
@@ -120,19 +124,70 @@ void scanr(TF1 *f_data, TF1 *f_bkg, float xmin,float xmax, float step, float sto
 
 }
 
+void fillh(TH1F *h, DataInterface *idata, int minql, int maxql, bool filters, bool offline)
+{
+  float qlong,qshort,baseline,diff,psd;
+  bool pu,sat;
 
+  acqPSDParam_t params;
+	event_data evento;
+
+  params = idata->GetParams();
+
+  for (int i = 0; i < idata->GetEntries(); i++) 
+  {
+    evento = idata->GetEntry(i);
+
+    qlong = evento.qlong;
+    qshort = evento.qshort;
+    baseline = evento.baseline;
+
+    if ((qlong > minql)&&(qlong < maxql))
+    {
+      pu = false;
+      sat = false;
+      if (filters)
+      {
+        pu = pileup(evento,params,pileupTH);
+        sat = saturation(evento,params);
+      }
+      {
+        diff = 0;
+
+        if( (offline)&&(!pu)&&(!sat) )
+        {
+          GetIntegralFromScope(evento, params, &qlong, &qshort, &baseline,false);
+          diff = TMath::Abs((float)evento.baseline - baseline);
+        }
+
+        if ( ((diff<baselineTH)&&(!pu)&&(!sat)) || (!filters) )
+        {
+            psd = (qlong - qshort) / qlong;
+
+            h->Fill(psd);
+        }
+
+      }
+    }
+  }
+
+  return;
+}
 int main(int argc, char *argv[])
 {
 
 	DataInterface *idata,*ibkg;
 	acqPSDParam_t params;
-	event_data evento;
 
-  TH1F *h_psd,*h_psd_bkg,*h_shifted, *h_diff;
+  TH1F *h_psd,*h_psd_bkg,*h_shifted, *h_diff, *h_diff_check;
+  TF1 *f_g_cf, *f_g_bkg, *f_g_bkg_s, *f_n, *ftot, *ftot_n, *ftot_g;
   TCanvas *cnv;
 
   int dummyargc = 0;
-  char **dummyargv;
+  char **dummyargv = 0;
+
+  float m = 0.206098;
+  float q = 0.383650;
 
   int nbin = 300;
   float hmin = 0;
@@ -140,10 +195,10 @@ int main(int argc, char *argv[])
 
   //valori notevoli sigma gaussiana normalizzata
 //  double f05pc = 2.807033768344;
-//  double f1pc = 2.575829303549;
+  double f1pc = 2.575829303549;
   double f2pc = 2.326347874041;
-//  double f5pc = 1.959963984540;
-//  double f10pc = 1.644853626951;
+  double f5pc = 1.959963984540;
+  double f10pc = 1.644853626951;
 
 
   double binw;
@@ -152,12 +207,8 @@ int main(int argc, char *argv[])
   int canale = 4;
   int center, hwidth;
   int tot_events;
+  char *graphfile=0;
 
-  float th_base = baselineTH;
-  int th_pu = pileupTH;
-
-  float qlong,qshort,baseline;
-  
   int neutroni, neutroni_gaus,
       neutroni_05pc, neutroni_1pc, neutroni_2pc, neutroni_5pc, neutroni_10pc;
 
@@ -174,6 +225,11 @@ int main(int argc, char *argv[])
   double psd05pch, psd1pch, psd2pch, psd5pch, psd10pch;
 
   int bin_05pc, bin_1pc, bin_2pc, bin_5pc, bin_10pc, bin_1pcn;
+  
+  float fom;
+//  limite alla dx del quale ho solo il x% di gamma (sul totale di gamma)
+  float g05pc,g1pc,g25pc,g5pc;
+  float g05pcb,g1pcb,g25pcb,g5pcb;
 
   bool batch = true;
   bool fitdata = true;
@@ -202,8 +258,10 @@ int main(int argc, char *argv[])
 
   fdata = argv[1];
   fbkg = argv[2];
-  center = atoi(argv[3]);
-  hwidth = atoi(argv[4]);
+  int energy = atoi(argv[3]); //keVee
+  center = TMath::Nint((energy-q) / m);
+  hwidth = TMath::Nint(atoi(argv[4]) / m);
+  if (argc > 5) graphfile = argv[5];
 
   idata = new DataInterface(fdata);
   idata->SetChannel(canale);
@@ -228,78 +286,59 @@ int main(int argc, char *argv[])
     cout << "\t#####\n" << endl;
   }
 
-  cnv = new TCanvas("cnv","",1200,500);
-  cnv->Divide(3,1);
+  cnv = new TCanvas("cnv","",1200,1500);
+  cnv->Divide(2,2);
   h_psd = new TH1F("h_psd","",nbin,hmin,hmax);
   h_psd_bkg = new TH1F("h_psd_bkg","",nbin,hmin,hmax);
   h_shifted = new TH1F("h_shifted","",nbin,hmin,hmax);
   h_diff = new TH1F("h_diff","",nbin,hmin,hmax);
+  h_diff_check = new TH1F("h_diff_check","",nbin,hmin,hmax);
 
   binw = h_psd->GetBinWidth(1);
 
-  for (int i = 0; i < tot_events; i++) 
-  {
-    evento = idata->GetEntry(i);
+//void fillh(TH2F *h, datainterface *idata, int minql, int maxql, bool filters, bool offline)
+  fillh(h_psd, idata, center-hwidth, center+hwidth, false, false);
+  fillh(h_psd_bkg, ibkg, center-hwidth, center+hwidth, false, false);
 
-    if ((evento.qlong > center-hwidth)&&(evento.qlong < center+hwidth))
-    {
-      if ((!pileup(evento,params,th_pu)) && (!saturation(evento,params)))
-      {
-        GetIntegralFromScope(evento, params, &qlong, &qshort, &baseline,false);
-
-        float diff = TMath::Abs(evento.baseline - baseline);
-
-        if ( diff < th_base )
-        {
-          float psd = (qlong - qshort) / (float) qlong;
-
-          h_psd->Fill(psd);
-        }
-      }
-
-    }
-  }
-
-  for (int i = 0; i < ibkg->GetEntries(); i++) 
-  {
-    evento = ibkg->GetEntry(i);
-
-    if ((evento.qlong > center-hwidth)&&(evento.qlong < center+hwidth))
-    {
-      if((!saturation(evento,params))&&(!pileup(evento,params,th_pu)))
-      {
-        GetIntegralFromScope(evento, params, &qlong, &qshort, &baseline,false);
-
-        float diff = TMath::Abs(evento.baseline - baseline);
-
-        if ( diff < th_base ) 
-        {
-          float psd = (qlong - qshort) / (float) qlong;
-          h_psd_bkg->Fill(psd);
-        }
-      }
-    }
-  }
-
-  TF1 *f_data, *f_bkg;
 
   float b_mean, b_rms;
 
   b_mean = h_psd_bkg->GetMean();
   b_rms = h_psd_bkg->GetRMS();
 
-  f_data = new TF1("f_data", "gaus", b_mean-b_rms, b_mean+b_rms );
+  //fit gamma su californio
+  f_g_cf = new TF1("f_g_cf", "gaus", b_mean-b_rms, b_mean+b_rms );
 //  f_bkg = new TF1("f_bkg", "gaus", b_mean-2*b_rms, b_mean+2*b_rms );
-  f_bkg = new TF1("f_bkg", "gaus" );
+  //fit gamma su file fondo
+  f_g_bkg = new TF1("f_g_bkg", "gaus" );
 
-  h_psd->Fit(f_data,"R0Q");
-  h_psd_bkg->Fit(f_bkg,"0Q");
+  //faccio il fit del picco gamma
+  if (batch)
+  {
+    //neutroni+gamma
+    h_psd->Fit(f_g_cf,"R0Q");
+    //fondo gamma
+    h_psd_bkg->Fit(f_g_bkg,"0Q");
+  }else
+  {
+    cout << "FIT f_g_cf\n";
+    h_psd->Fit(f_g_cf,"R0");
+    cout << "FIT f_g_bkg\n";
+    h_psd_bkg->Fit(f_g_bkg,"0");
 
-//  float scale = f_data->GetParameter(0)/f_bkg->GetParameter(0);
-  float scale = f_data->Integral(hmin,hmax) / ( h_psd_bkg->GetEntries() * binw );
-  float shift = f_data->GetParameter(1)-b_mean;
+  }
+  //  float scale = f_data->GetParameter(0)/f_bkg->GetParameter(0);
+  float scale = f_g_cf->Integral(hmin,hmax) / ( h_psd_bkg->GetEntries() * binw );
+  float shift = f_g_cf->GetParameter(1)-b_mean;
   int binshift = TMath::Nint(shift/binw);
 
+  float rms = f_g_bkg->GetParameter(2);
+  float mean = f_g_bkg->GetParameter(1); 
+
+  g05pcb = mean + rms * f1pc;
+  g1pcb  = mean + rms * f2pc;
+  g25pcb = mean + rms * f5pc;
+  g5pcb  = mean + rms * f10pc;
 
   if(!batch)
   {
@@ -308,19 +347,34 @@ int main(int argc, char *argv[])
   }
 //  h_psd_bkg->GetXaxis()->Set(nbin,hmin+shift,hmax+shift);
 
-  //shift bkg histo
+  //shift and scale bkg histo
   for(int i = 1; i <= nbin;i++)
   {
    int j = i + binshift;
    if( ( j >= 1 )&&( j <= nbin) )
    {
-     h_shifted->SetBinContent( j, h_psd_bkg->GetBinContent( i ) );
+     h_shifted->SetBinContent( j, h_psd_bkg->GetBinContent( i ) * scale);
    }
 
   }
 
-  h_shifted->Scale(scale);
+//  h_shifted->Scale(scale);
   h_shifted->ResetStats();
+
+  f_g_bkg_s = new TF1("f_g_bkg_s","gaus");
+  if (batch)
+  {
+    h_shifted->Fit(f_g_bkg_s,"0Q");
+  }else
+  {
+    cout << "FIT f_g_bkg scaled\n";
+    h_shifted->Fit(f_g_bkg_s,"0");
+  }
+
+  h_diff->Add(h_psd);
+  h_diff->Add(f_g_bkg_s,-1);
+  //h_diff->Add(h_shifted-1);
+  h_diff->ResetStats();
 
   int bin;
 
@@ -350,26 +404,55 @@ int main(int argc, char *argv[])
   //no... voglio vedere in che punto perdo solo l'1% dei neutroni
 //  bin_1pcn = scanrh(h_psd,h_shifted, 1, nbin, 0.99, psd_minh, ratio1pcnh);
 //  ratio1pcnh = 1 - ratio1pcnh;
- 
-  float n_mean = h_psd->GetMean();
-  float n_rms = h_psd->GetRMS();
+
+//  float n_mean = h_psd->GetMean();
+//  float n_rms = h_psd->GetRMS();
+
+  float n_mean = TMath::Abs(h_diff->GetMean());
+  float n_rms = h_diff->GetRMS();
+// per gaus: I = costant*sigma*sqrt(2*pi)
+  float sqrt2pi = 2.50662827463;
+  float n_const = h_diff->GetEntries()/(n_rms*sqrt2pi); 
+
+  for(int i = 1; i<=nbin; i++)
+  {
+    if (h_diff->GetBinContent(i)<0)
+    {
+      h_diff->SetBinContent(i,0);
+    }
+  }
 
   if (!batch) cout << "m: " << n_mean << " rms: " << n_rms << endl;
 
   //ora possiamo cambiare i range
-  h_psd->GetXaxis()->SetRange(0,nbin);
+  h_psd->GetXaxis()->SetRange(hmin,nbin);
 //  h_psd_bkg->GetXaxis()->SetRange(hmin,nbin);
   h_shifted->GetXaxis()->SetRange(hmin,nbin);
 
-  TF1 *f_n,*ftot;
-  f_n = new TF1("f_n", "gaus", psd1pch, n_mean+3*n_rms );
+//  f_n = new TF1("f_n", "gaus", psd1pch, n_mean+3*n_rms );
+//  f_n = new TF1("f_n", "gaus", n_mean-n_rms/2, hmax );
+  f_n = new TF1("f_n", "gaus", n_mean-n_rms, hmax );
+
+
+  f_n->SetParameter(0,n_const);
+  f_n->SetParameter(1,n_mean);
+  f_n->SetParameter(2,n_rms);
+
+  f_n->SetParLimits(0,0,n_const*3);
+//  float fitminmean = n_mean-3*n_rms;
+//  if (fitminmean<0) fitminmean = 0;
+//  f_n->SetParLimits(1,fitminmean,hmax);
+  f_n->SetParLimits(1,b_mean,hmax);
 
   if (batch)
   {
-    h_psd->Fit(f_n,"R0Q");
+//    h_psd->Fit(f_n,"R0Q");
+    h_diff->Fit(f_n,"R0QL");
   } else
   {
-    h_psd->Fit(f_n,"R0");
+//    h_psd->Fit(f_n,"R0");
+    cout << "FIT f_n su h_diff\n";
+    h_diff->Fit(f_n,"R0L");
   }
 
   ftot = new TF1("ftot","gaus(0)+gaus(3)",hmin+2*binw,hmax);
@@ -377,7 +460,7 @@ int main(int argc, char *argv[])
   
   for(int i =0; i < 3; i++)
   {
-    p[i] = f_data->GetParameter(i);
+    p[i] = f_g_cf->GetParameter(i);
     p[i+3] = f_n->GetParameter(i);
   }
 
@@ -388,15 +471,29 @@ int main(int argc, char *argv[])
     h_psd->Fit(ftot,"IMQ0");
   }else
   {
+    cout << "FIT ftot\n";
     h_psd->Fit(ftot,"IM0");
   }
 
-  n_mean = ftot->GetParameter(4);
-  n_rms = ftot->GetParameter(5);
+  mean = TMath::Abs(ftot->GetParameter(1));
+  rms = TMath::Abs(ftot->GetParameter(2));
+  n_mean = TMath::Abs(ftot->GetParameter(4));
+  n_rms = TMath::Abs(ftot->GetParameter(5));
+  fom = getFom(mean,rms,n_mean,n_rms);
+
+  // soglia gamma da californio
+  g05pc = mean + rms * f1pc;
+  g1pc  = mean + rms * f2pc;
+  g25pc = mean + rms * f5pc;
+  g5pc  = mean + rms * f10pc;
+
+  ftot_n = new TF1("ftot_n","gaus");
+  ftot_g = new TF1("ftot_g","gaus");
+
   for(int i=0;i<3;i++)
   {
-    f_bkg->SetParameter(i, ftot->GetParameter(i));
-    f_n->SetParameter(i, ftot->GetParameter(i+3));
+    ftot_g->SetParameter(i, TMath::Abs(ftot->GetParameter(i)));
+    ftot_n->SetParameter(i, TMath::Abs(ftot->GetParameter(i+3)));
   }
 
   //fatto questo vogliamo trovare la valle.... facciamo lo scan
@@ -419,11 +516,6 @@ int main(int argc, char *argv[])
   psd_meanh = h_psd->GetBinCenter(y);
   psd_mean = ftot->GetMinimumX(b_mean,n_mean);
 
-  h_diff->Add(h_psd);
-//  h_diff->Add(h_psd_bkg,-1);
-  h_diff->Add(h_shifted,-1);
-  h_diff->ResetStats();
-
   //nonononoo e` sbagliato!!!
 /*  double x = ftot->GetParameter(1);
   double s = ftot->GetParameter(2); 
@@ -437,11 +529,11 @@ int main(int argc, char *argv[])
 
   float step = 0.001;
 
-  scan(ftot, f_bkg, hmin,  hmax, step, 0.1,   psd10pc, ratio10pc);
-  scan(ftot, f_bkg, psd10pc, hmax, step, 0.05,  psd5pc,  ratio5pc);
-  scan(ftot, f_bkg, psd5pc,  hmax, step, 0.02,  psd2pc,  ratio2pc);
-  scan(ftot, f_bkg, psd2pc,  hmax, step, 0.01,  psd1pc,  ratio1pc);
-  scan(ftot, f_bkg, psd1pc,  hmax, step, 0.005, psd05pc, ratio05pc);
+  scan(ftot, ftot_g, hmin,  hmax, step, 0.1,   psd10pc, ratio10pc);
+  scan(ftot, ftot_g, psd10pc, hmax, step, 0.05,  psd5pc,  ratio5pc);
+  scan(ftot, ftot_g, psd5pc,  hmax, step, 0.02,  psd2pc,  ratio2pc);
+  scan(ftot, ftot_g, psd2pc,  hmax, step, 0.01,  psd1pc,  ratio1pc);
+  scan(ftot, ftot_g, psd1pc,  hmax, step, 0.005, psd05pc, ratio05pc);
   
   psd_max = psd1pc;
 
@@ -450,21 +542,21 @@ int main(int argc, char *argv[])
   //con l'istogramma non riesco a calcolarlo,serve sempre il fit...
   psd_minh = psd_min;
 
-  neutroni_gaus = TMath::Nint( f_n->Integral(hmin,hmax)/binw );
+  neutroni_gaus = TMath::Nint( ftot_n->Integral(hmin,hmax)/binw );
   neutroni = h_diff->GetEntries();
 
-  neutroni_05pc = TMath::Nint( f_n->Integral(psd05pc,hmax) / binw );
-  neutroni_1pc = TMath::Nint( f_n->Integral(psd1pc,hmax) / binw );
-  neutroni_2pc = TMath::Nint( f_n->Integral(psd2pc,hmax) / binw );
-  neutroni_5pc = TMath::Nint( f_n->Integral(psd5pc,hmax) / binw );
-  neutroni_10pc = TMath::Nint( f_n->Integral(psd10pc,hmax) / binw );
+  neutroni_05pc = TMath::Nint( ftot_n->Integral(psd05pc,hmax) / binw );
+  neutroni_1pc = TMath::Nint( ftot_n->Integral(psd1pc,hmax) / binw );
+  neutroni_2pc = TMath::Nint( ftot_n->Integral(psd2pc,hmax) / binw );
+  neutroni_5pc = TMath::Nint( ftot_n->Integral(psd5pc,hmax) / binw );
+  neutroni_10pc = TMath::Nint( ftot_n->Integral(psd10pc,hmax) / binw );
 
   //nota che queste non sono corrette ma sarebbero 0.5%, 0.99%, 0.196%, 4.8%, 9%
   //poiche` prende la percentuale rispetto al numero di neutroni e non di eventi totali
   if (!batch)
   {
     // per gaus: I = costant*sigma*sqrt(2*pi)
-    cout << "Integrale gaussiana neutroni: " <<  f_n->Integral(hmin,hmax)/binw << endl;
+    cout << "Integrale gaussiana neutroni: " <<  ftot_n->Integral(hmin,hmax)/binw << endl;
     cout << "Conteggio neutroni da fit gaussiana: " << neutroni_gaus << endl;
     cout << "Conteggio neutroni sopra soglia 1% gamma: " << neutroni_1pc << endl;
     cout << "Conteggio neutroni da istogramma: " << neutroni << endl;
@@ -490,19 +582,19 @@ int main(int argc, char *argv[])
   //il problema e` che ci sono le oscillazioni sull'istogramma che sballano tutto
  
   float counts;
-  counts = f_n->Integral(hmin,hmax);
+  counts = ftot_n->Integral(hmin,hmax);
 
-  eff05pc = f_n->Integral(psd05pc,hmax) / counts;
-  eff1pc  = f_n->Integral(psd1pc,hmax)  / counts;
-  eff2pc  = f_n->Integral(psd2pc,hmax)  / counts;
-  eff5pc  = f_n->Integral(psd5pc,hmax)  / counts;
-  eff10pc = f_n->Integral(psd10pc,hmax) / counts;
+  eff05pc = ftot_n->Integral(psd05pc,hmax) / counts;
+  eff1pc  = ftot_n->Integral(psd1pc,hmax)  / counts;
+  eff2pc  = ftot_n->Integral(psd2pc,hmax)  / counts;
+  eff5pc  = ftot_n->Integral(psd5pc,hmax)  / counts;
+  eff10pc = ftot_n->Integral(psd10pc,hmax) / counts;
  
-  eff05pch = f_n->Integral(psd05pch,hmax) / counts;
-  eff1pch  = f_n->Integral(psd1pch,hmax)  / counts;
-  eff2pch  = f_n->Integral(psd2pch,hmax)  / counts;
-  eff5pch  = f_n->Integral(psd5pch,hmax)  / counts;
-  eff10pch = f_n->Integral(psd10pch,hmax) / counts;
+  eff05pch = ftot_n->Integral(psd05pch,hmax) / counts;
+  eff1pch  = ftot_n->Integral(psd1pch,hmax)  / counts;
+  eff2pch  = ftot_n->Integral(psd2pch,hmax)  / counts;
+  eff5pch  = ftot_n->Integral(psd5pch,hmax)  / counts;
+  eff10pch = ftot_n->Integral(psd10pch,hmax) / counts;
 
   if (!batch)
   {
@@ -525,32 +617,43 @@ int main(int argc, char *argv[])
     cout << "10% ratio: "  << ratio10pc << " psd: " << psd10pc << " eff: " << eff10pc << endl;
     cout << "PSD oltre la quale perdo solo 1% neutroni : " << psd_min << endl;
     cout << "PSD min, valle e max (1%): " << psd_min << " " << psd_mean << " " << psd_max << endl;
-
-    cnv->cd(1);
-    h_psd->Draw();
-    f_n->SetRange(hmin,hmax);
-    f_n->SetLineColor(1);
-    f_n->Draw("SAME");
-    f_data->SetRange(hmin,hmax);
-    f_data->SetLineColor(2);
-    f_data->Draw("SAME");
-    ftot->SetLineColor(3);
-    ftot->Draw("SAME");
-
-    cnv->cd(2);
-    //	h_psd_bkg->Draw();
-    //  f_bkg->Draw("SAME");
-    h_shifted->Draw();
-
-    cnv->cd(3);
-    h_diff->Draw();
   }
+
+  cnv->cd(2);
+  //	h_psd_bkg->Draw();
+  //  f_bkg->Draw("SAME");
+  h_shifted->Draw();
+  f_g_bkg_s->Draw("SAME");
+
+  cnv->cd(3);
+  h_diff->Draw();
+  f_n->Draw("SAME");
+
+  h_diff_check->Add(h_psd);
+  h_diff_check->Add(ftot_g,-1);
+  cnv->cd(4);
+  h_diff_check->Draw();
+  f_n->Draw("SAME");
+
+  cnv->cd(1);
+  h_psd->Draw();
+  ftot_n->SetLineColor(1);
+  ftot_n->Draw("SAME");
+  ftot_g->SetLineColor(2);
+  ftot_g->Draw("SAME");
+  ftot->SetLineColor(3);
+  ftot->Draw("SAME");
+
+
+  cnv->SaveAs(graphfile);
 
   if (fitdata)
   {
-    cout << center << " " << psd_min << " " << psd_mean << " " << psd_max << " " 
-      << psd05pc << " " << psd1pc << " " << psd2pc << " " << psd5pc << " " << psd10pc << " " 
-      << eff05pc << " " << eff1pc << " " << eff2pc << " " << eff5pc << " " << eff10pc << endl;
+    cout << energy << " " << psd_min << " " << psd_mean << " " << psd_max << " " 
+      << psd05pc   << " " << psd1pc  << " " << psd2pc   << " " << psd5pc  << " " << psd10pc << " " 
+      << eff05pc   << " " << eff1pc  << " " << eff2pc   << " " << eff5pc  << " " << eff10pc << " "
+      << g05pc     << " " << g05pcb  << " " << g1pc     << " " << g1pcb   << " " 
+      << g25pc     << " " << g25pcb  << " " << g5pc     << " " << g5pcb   << " " << fom << endl;
   }else
   {
     cout << center << " " << psd_minh << " " << psd_meanh << " " << psd_maxh << " " 

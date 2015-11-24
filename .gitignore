@@ -13,3 +13,4 @@ triggercheck
 *.pyc
 *.swp
 *.o
+*.png
